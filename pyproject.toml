@@ -1,0 +1,39 @@
+[project]
+name = "sqlalchemy-kinetica"
+version = "7.2.1.0"
+dependencies = [
+    'sqlalchemy>=2.0.31', 
+    'gpudb>=7.2.1.0',
+    'shapely>=2.0.5',
+    'geojson>=3.1.0',
+]
+authors = [
+    {name = "Kinetica DB, Inc.", email = "support@kinetica.com"},
+]
+
+description = "Kinetica Dialect for SQLAlchemy"
+readme = "README.md"
+license = { text = "MIT License" }
+requires-python = ">=3.8"
+classifiers = [
+     "Programming Language :: Python :: 3",
+     "Topic :: Database",
+]
+keywords = [ "kinetica", "gpudb" ]
+
+[project.entry-points."sqlalchemy.dialects"]
+kinetica = "sqlalchemy_kinetica.dialect:KineticaDialect"
+
+[project.urls]
+Homepage = "https://www.kinetica.com"
+Documentation = "https://docs.kinetica.com/7.2/api/python/"
+
+
+[build-system]
+requires = ["setuptools>=61"] # minimum version of setuptools for toml support
+build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools.packages.find]
+include = ["sqlalchemy_kinetica", "examples"]
+namespaces = true

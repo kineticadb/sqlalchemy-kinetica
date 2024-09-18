@@ -1777,16 +1777,10 @@ def select_unpivot(conn, schema):
         customer_contact.c.cell_phone.label('Cell')
     )
 
-    unpivot_clause = Unpivot(
-        column = text('phone_number'),
-        for_column = text('phone_type'),
-        in_columns = ["Home", "Work", "Cell"]
-    )
-
     query = (
         UnpivotSelect(column("name"), column("phone_type"), column("phone_number"))
-        .source_query(subquery)
-        .unpivot(unpivot_clause)
+        .select_from(subquery)
+        .unpivot("phone_number", "phone_type", ["Home", "Work", "Cell"])
         .order_by(column("name"), column("phone_type"))
     )
 
@@ -2387,7 +2381,7 @@ if __name__ == "__main__":
             "username": param_user,
             "password": param_pass,
             "bypass_ssl_cert_check": param_bypass_ssl_cert_check,
-        },
+        }
     )
 
     with sa_engine.connect() as sa_conn:

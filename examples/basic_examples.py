@@ -185,8 +185,8 @@ if __name__ == "__main__":
     password = args[2] if len(args) >= 3 else ENV_PASS
     schema = args[3] if len(args) >= 4 else ENV_SCHEMA
     bypass_ssl_cert_check = args[4] if len(args) >= 5 else ENV_BYPASS_SSL_CERT_CHECK
-    if bypass_ssl_cert_check in ["1", 1]:
-        bypass_ssl_cert_check = True
+
+    bypass_ssl_cert_check = str(bypass_ssl_cert_check).upper() in ["1", "TRUE"]
 
     engine = get_engine(url, username, password, bypass_ssl_cert_check)
     

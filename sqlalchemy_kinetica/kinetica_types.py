@@ -42,7 +42,7 @@ class TIMESTAMP(sqltypes.INT):
 
 
 class TINYINT(sqltypes.SMALLINT):
-    __visit_name__ = "SMALLINT"
+    __visit_name__ = "TINYINT"
 
 class Tinyint(sqltypes.SMALLINT):
     pass

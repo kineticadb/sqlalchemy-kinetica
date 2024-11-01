@@ -33,6 +33,7 @@ from sqlalchemy.sql import (
     compiler,
     functions,
 )
+from sqlalchemy.sql.compiler import SQLCompiler
 from sqlalchemy.sql.ddl import DropConstraint, CreateColumn
 from sqlalchemy.sql.schema import (
     ColumnCollectionConstraint,
@@ -187,7 +188,7 @@ class KineticaSqlCompiler(compiler.SQLCompiler):
         return None
 
 
-class KineticaDDLCompiler(compiler.DDLCompiler):
+class KineticaDDLCompiler(compiler.DDLCompiler, SQLCompiler):
 
     def visit_create_table(self, create, **kwargs):
 

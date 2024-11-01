@@ -6,7 +6,7 @@
 	|
 	<a href="https://docs.kinetica.com/7.2/">Docs</a>
 	|
-	<a href="https://docs.kinetica.com/7.2/api/python/">Python DBAPI Docs</a>
+	<a href="https://docs.kinetica.com/7.2/connectors/sqlalchemy/">Kinetica Dialect for SQLAlchemy Docs</a>
 	|
 	<a href="https://join.slack.com/t/kinetica-community/shared_invite/zt-1bt9x3mvr-uMKrXlSDXfy3oU~sKi84qg">Community Slack</a>
 </h5>
@@ -25,7 +25,12 @@ This project contains the source code of the Kinetica Dialect for SQLAlchemy, as
 well as a number of examples of how to perform both standard & non-standard SQL
 functions.
 
-Kinetica documentation can be found at <https://docs.kinetica.com/7.2/>.
+Relevant Kinetica documentation available:
+
+- [Full Documentation](https://docs.kinetica.com/7.2/)
+- [Kinetica Dialect for SQLAlchemy](https://docs.kinetica.com/7.2/connectors/sqlalchemy/)
+- [Python API](https://docs.kinetica.com/7.2/api/python)
+
 
 ### Installation
 

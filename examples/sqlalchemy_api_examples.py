@@ -78,15 +78,14 @@ def create_table_all_types(conn, schema):
             ts  TIMESTAMP,                                        /* timestamp                                                                          */
             j   JSON,                                             /* JSON string                                                                        */
             bl  BLOB,                                             /* native bytes                                                                       */
-            w   WKT(BYTES),                                       /* geospatial column for WKT binary data                                              */
+            w   BLOB(WKT),                                        /* geospatial column for WKT binary data                                              */
             g   GEOMETRY,                                         /* geospatial column for WKT string data                                              */
             ai  INTEGER[10],                                      /* array column holding 10 integer values                                             */
             v   VECTOR(10),                                       /* vector column holding 10 floating point values                                     */
-            aj  JSON[10],                                         /* array column holding 10 JSON values                                                */
             PRIMARY KEY (i)                                       /* primary key columns must be NOT NULL                                               */
         )
 
-    See:  https://docs.kinetica.com/7.2/sql/ddl/#create-table-as
+    See:  https://docs.kinetica.com/7.2/sql/ddl/#create-table
 
     Args:
         conn (Connection): a SQLAlchemy connection to Kinetica
@@ -123,7 +122,6 @@ def create_table_all_types(conn, schema):
         Column("g", GEOMETRY),
         Column("ai", ARRAY(Integer, dimensions = 10)),
         Column("v", VECTOR(10)),
-        Column("aj", JSONArray(size = 10)),
         schema = schema
     )
     metadata.create_all(conn.engine)
@@ -303,7 +301,7 @@ def create_table_as(conn, schema):
             FROM employee
         )
 
-    See:  https://docs.kinetica.com/7.2/sql/ddl/#create-table
+    See:  https://docs.kinetica.com/7.2/sql/ddl/#create-table-as
 
     Args:
         conn (Connection): a SQLAlchemy connection to Kinetica
@@ -332,17 +330,37 @@ def create_table_as(conn, schema):
     conn.execute(create_stmt)
 
 
+def create_datasource(conn, schema, url, username, password):
+    SQL_CREATE_DATA_SOURCE = """
+CREATE OR REPLACE DATA SOURCE {}
+LOCATION = '{}'
+USER = '{}'
+PASSWORD = '{}'
+    """
+
+    create_stmt = SQL_CREATE_DATA_SOURCE.format(
+        f"""{'"' + schema + '".' if schema else ''}jdbc_ds""",
+        f"jdbc:kinetica:URL={url}",
+        username,
+        password
+    )
+
+    print_statement("CREATE DATA SOURCE", create_stmt)
+
+    conn.execute(text(create_stmt))
+
+
 def create_external_table(conn, schema):
     """
     Generates equivalent SQL to:
 
-        CREATE EXTERNAL TABLE ext_order_product42
-        REMOTE QUERY 'SELECT * FROM orders WHERE product_id = 42'
+        CREATE EXTERNAL TABLE remote_employee
+        REMOTE QUERY 'SELECT * EXCLUDE(profile) FROM employee'
         WITH OPTIONS
         (
             DATA SOURCE = 'jdbc_ds',
             SUBSCRIBE = TRUE,
-            REMOTE_QUERY_INCREASING_COLUMN = 'order_id'
+            REMOTE_QUERY_INCREASING_COLUMN = 'id'
         )
         USING TABLE PROPERTIES (CHUNK SIZE = 1000000, NO_ERROR_IF_EXISTS = true, TTL = 120)
 
@@ -357,30 +375,32 @@ def create_external_table(conn, schema):
 
     metadata = MetaData()
 
-    table_properties = {
-        "CHUNK SIZE": 1000000,
-        "NO_ERROR_IF_EXISTS": "TRUE",
-        "TTL": 120,
-    }
+    remote_table_name = f"""{'"' + schema + '".' if schema else ''}employee"""
+    data_source_name = f"""{schema + '.' if schema else ''}jdbc_ds"""
 
-    test_table1 = Table(
-        "ext_order_product42",
+    external_table = Table(
+        "remote_employee",
         metadata,
         schema = schema,
         prefixes = ["EXTERNAL"],
-        info = table_properties,
-        kinetica_external_table_remote_query = "SELECT * FROM orders WHERE product_id = 42",
+        info = {
+            "CHUNK SIZE": 1000000,
+            "NO_ERROR_IF_EXISTS": "TRUE",
+            "TTL": 120
+        },
+        kinetica_external_table_remote_query = f"SELECT * EXCLUDE(profile) FROM {remote_table_name}",
         kinetica_external_table_option = {
-            'DATA SOURCE': f"{schema + '.' if schema else ''}jdbc_ds",
+            'DATA SOURCE': data_source_name,
             'SUBSCRIBE': 'TRUE',
-            'REMOTE_QUERY_INCREASING_COLUMN': 'order_id'
+            'REMOTE_QUERY_INCREASING_COLUMN': 'id'
         }
     )
 
-    create_stmt = CreateTable(test_table1).compile(dialect = KineticaDialect())
+    create_stmt = CreateTable(external_table).compile(dialect = KineticaDialect())
+
     print_statement("CREATE EXTERNAL TABLE", create_stmt)
 
-    # conn.execute(CreateTable(test_table1))
+    conn.execute(create_stmt)
 
 
 def create_example_tables(conn, schema):
@@ -629,7 +649,7 @@ def insert_multiple_records(conn, schema):
     # Create a handle to the source table
     #   The UPDATE_ON_EXISTING_PK hint can be used to invoke upsert mode,
     #   which will overwrite any existing record with the same PK with the new record
-    employee = Table('employee', metadata, prefixes = ["/* KI_HINT_UPDATE_ON_EXISTING_PK */"], autoload_with = conn, schema = schema)
+    employee = Table('employee', metadata, autoload_with = conn, schema = schema)
 
     # Define the insert statement with values
     records = [
@@ -2369,10 +2389,8 @@ if __name__ == "__main__":
     param_bypass_ssl_cert_check = param_args[4] if len(param_args) >= 5 else ENV_BYPASS_SSL_CERT_CHECK
     param_recreate_schema = param_args[5] if len(param_args) >= 6 else ENV_RECREATE_SCHEMA
 
-    if param_bypass_ssl_cert_check in ["1", 1]:
-        param_bypass_ssl_cert_check = True
-    if param_recreate_schema in ["1", 1]:
-        param_recreate_schema = True
+    param_bypass_ssl_cert_check = str(param_bypass_ssl_cert_check).upper() in ["1", "TRUE"]
+    param_recreate_schema = str(param_recreate_schema).upper() in ["1", "TRUE"]
 
     sa_engine = create_engine(
         "kinetica://",
@@ -2397,6 +2415,7 @@ if __name__ == "__main__":
         create_table_replicated(sa_conn, param_schema)
         create_table_sharded_with_options(sa_conn, param_schema)
         create_table_as(sa_conn, param_schema)
+        create_datasource(sa_conn, param_schema, param_url, param_user, param_pass)
         create_external_table(sa_conn, param_schema)
 
         create_example_tables(sa_conn, param_schema)

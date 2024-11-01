@@ -8,14 +8,13 @@ from typing import Type, Any
 from faker import Faker
 from shapely.geometry import Point, LineString, Polygon
 
-from sqlalchemy import (select, Table)
+from sqlalchemy import (column, select, Table)
 from sqlalchemy_kinetica.dialect import KineticaDialect
 
 __all__ = [
     "fake",
     "generate_random_value",
     "generate_list_of_type",
-    "generate_list_of_json",
     "generate_random_vector",
     "generate_random_json",
     "generate_random_unicode_string",
@@ -53,10 +52,6 @@ def generate_random_value(value_type: Type) -> Any:
 
 def generate_list_of_type(value_type: Type, num_elements: int) -> str:
     return f"{[generate_random_value(value_type) for _ in range(num_elements)]}"
-
-
-def generate_list_of_json(num_elements: int) -> str:
-    return f"'[{', '.join([generate_random_json() for _ in range(num_elements)])}]'"
 
 
 def generate_random_vector(size=10):
@@ -172,8 +167,7 @@ def generate_random_record():
         "w": generate_random_polygon(),
         "g": generate_random_polygon(),
         "ai": generate_list_of_type(int, 10),
-        "v": generate_random_vector(10),
-        "aj": generate_list_of_json(10)
+        "v": generate_random_vector(10)
     }
 
 
@@ -216,7 +210,7 @@ def print_data(title, stmt, result):
 
 def check_data(title, metadata, conn, schema, table, sort_column):
 
-    check_query = select(Table(table, metadata, autoload_with = conn, schema = schema)).order_by(sort_column)
+    check_query = select("*").select_from(Table(table, metadata, autoload_with = conn, schema = schema)).order_by(column(sort_column))
     check_result = conn.execute(check_query)
     print_data(title, check_query, check_result)
 

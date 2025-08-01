@@ -1,7 +1,13 @@
-# Kinetica Go API Changelog
+# Kinetica SQLAlchemy Changelog
 
 
 ## Version 7.2
+
+### Version 7.2.2.1 - 2025-08-01
+
+-   Switched `CompileError` from `distutils` to `sqlalchemy.exc`
+-   Capped supported SQLAlchemy version at `2.0.39`
+
 
 ### Version 7.2.2.0 - 2024-10-31
 

@@ -462,7 +462,8 @@ def create_example_tables(conn, schema):
         Column("symbol", VARCHAR(4)),
         Column("open_dt", DATETIME),
         Column("open_price", DECIMAL(7,4)),
-        schema = schema
+        schema = schema,
+        prefixes = ["REPLICATED"]
     )
     quotes.create(conn)
 

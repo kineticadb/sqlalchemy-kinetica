@@ -1,8 +1,8 @@
-from distutils.errors import CompileError
 from os import readv
 from random import randint
 
 from sqlalchemy import Executable, ClauseElement, FunctionElement, literal_column, BinaryExpression, Select
+from sqlalchemy.exc import CompileError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.dml import Insert, Update
 from sqlalchemy.sql.functions import GenericFunction

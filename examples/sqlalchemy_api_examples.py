@@ -1,5 +1,4 @@
 import os
-import random
 import sys
 
 from sqlalchemy import (
@@ -10,7 +9,6 @@ from sqlalchemy import (
     REAL,
     DOUBLE,
     VARCHAR,
-    DECIMAL,
     UUID,
     DATE,
     TIME,
@@ -18,14 +16,14 @@ from sqlalchemy import (
     DATETIME,
     select,
     insert, text, MetaData, Table, Column, Integer, nullsfirst, asc, literal, func, and_, case, cast, desc, union,
-    union_all, intersect, except_, column, alias, update, delete, )
+    union_all, intersect, except_, column, alias, update, delete, engine, )
 # from sqlalchemy.sql import expression
 from sqlalchemy.sql.ddl import CreateTable
 
 from example_utils import *
 from sqlalchemy_kinetica import kinetica_types
 from sqlalchemy_kinetica.custom_commands import ki_insert as insert, CreateTableAs, Asof, \
-    FirstValue, Pivot, PivotSelect, Unpivot, UnpivotSelect, ki_insert, FilterByString, EvaluateModel, KiUpdate
+    FirstValue, PivotSelect, UnpivotSelect, ki_insert, FilterByString, EvaluateModel, KiUpdate
 from sqlalchemy_kinetica.dialect import KineticaDialect
 from sqlalchemy_kinetica.kinetica_types import (
     TINYINT,
@@ -35,7 +33,6 @@ from sqlalchemy_kinetica.kinetica_types import (
     IPV4,
     BlobWKT,
     GEOMETRY,
-    JSONArray,
     BLOB,
     FLOAT,
     DECIMAL,
@@ -168,7 +165,7 @@ def create_table_replicated(conn, schema):
         conn (Connection): a SQLAlchemy connection to Kinetica
         schema (str): database schema in which to perform operations
     """
-    from sqlalchemy import MetaData, Table, Column, Integer, String
+    from sqlalchemy import MetaData, Table, Column, Integer
 
     metadata = MetaData()
 
@@ -191,7 +188,7 @@ def create_table_replicated(conn, schema):
     )
 
     print_statement("Employee Table DDL - Replicated", CreateTable(employee).compile(conn))
-    
+
     metadata.create_all(conn.engine)
 
 
@@ -240,7 +237,7 @@ def create_table_sharded_with_options(conn, schema):
         conn (Connection): a SQLAlchemy connection to Kinetica
         schema (str): database schema in which to perform operations
     """
-    from sqlalchemy import MetaData, Table, Column, Integer, String
+    from sqlalchemy import MetaData, Table, Column, Integer
 
     metadata = MetaData()
 
@@ -285,9 +282,9 @@ def create_table_sharded_with_options(conn, schema):
         kinetica_tier_strategy = "( ( VRAM 1, RAM 7, PERSIST 5 ) )",
         kinetica_partition_clause = partition_clause
     )
-    
+
     print_statement("Employee Table DDL - Sharded with Options", CreateTable(employee).compile(conn))
-    
+
     metadata.create_all(conn.engine)
 
 
@@ -308,7 +305,7 @@ def create_table_as(conn, schema):
         schema (str): database schema in which to perform operations
     """
 
-    from sqlalchemy import MetaData, Table, Column, Integer, String
+    from sqlalchemy import MetaData, Table
 
     metadata = MetaData()
 
@@ -326,7 +323,7 @@ def create_table_as(conn, schema):
     create_stmt = create_stmt.compile(conn)
 
     print_statement("CREATE TABLE...AS", create_stmt)
-    
+
     conn.execute(create_stmt)
 
 
@@ -493,8 +490,8 @@ def create_example_tables(conn, schema):
     data = [
         [1, 'EBAY', '2006-12-15 10:20:30', 30.06],
         [2, 'EBAY', '2016-12-15 11:22:33', 33.16],
-        [3, 'ABCD', '2006-12-15 12:24:36', 1224.06],
-        [4, 'ABCD', '2016-12-15 13:26:42', 1326.16]
+        [3, 'ABCD', '2006-12-15 12:24:36', 224.06],
+        [4, 'ABCD', '2016-12-15 13:26:42', 326.16]
     ]
     records = [ {key: val for key, val in zip(cnames, record)} for record in data ]
 
@@ -1062,9 +1059,9 @@ def select_join_asof_filter(conn, schema):
     # Compile the query to see the generated SQL
     compiled_query = query.compile(conn, compile_kwargs = {"literal_binds": True})
 
-    result = conn.execute(query)
+    result = conn.execute(compiled_query)
     print_data("ASOF JOIN as Filter", compiled_query, result)
-    
+
 
 def select_aggregation_without_groupby(conn):
     """
@@ -1530,7 +1527,7 @@ def select_window_ranking(conn):
     # Compile the query
     compiled_query = query.compile(conn, compile_kwargs = {"literal_binds": True})
 
-    result = conn.execute(query)
+    result = conn.execute(compiled_query)
     print_data("Window Function - Ranking", compiled_query, result)
 
 
@@ -2064,7 +2061,7 @@ def ml_evaluate_model_select(conn, schema):
                 SOURCE_TABLE => INPUT_TABLE(select raster_uri from raster_input)
             )
         )
-    
+
     See:  https://docs.kinetica.com/7.2/sql/ml/#evaluate-model
 
     Args:
@@ -2213,18 +2210,18 @@ def update_with_subquery_in_set_clause(conn, schema):
     # Update statement
     stmt = (
         update(e_base)
-        .values(sal = max_sal_in_dept * .1 + e_base.c.sal * .9)
+        .values(sal = max_sal_in_dept * literal(.1) + e_base.c.sal * literal(.9))
     )
 
     # Compile to SQL to see the query
-    compiled_query = stmt.compile(conn)
+    compiled_query = stmt.compile(conn, dialect=KineticaDialect(), compile_kwargs={"literal_binds": True})
 
     # Print the generated SQL query
     print_statement("Update with Subquery in SET Clause", compiled_query)
 
     check_data("Update with Subquery in SET Clause Data (Before)", metadata, conn, schema, 'employee', 'id')
 
-    conn.execute(compiled_query)
+    conn.execute(stmt)
 
     check_data("Update with Subquery in SET Clause Data (After)", metadata, conn, schema, 'employee', 'id')
 
@@ -2284,7 +2281,7 @@ def update_with_join_non_infixed(conn, schema):
         SET     sal = e.sal, manager_id = e.manager_id
         FROM    employee_backup eb, employee e
         WHERE   eb.id = e.id
-    
+
     See:  https://docs.kinetica.com/7.2/sql/dml/#update
 
     Args:
@@ -2370,14 +2367,6 @@ def delete_with_subquery(conn, schema):
     check_data("Delete with Subquery Data (After)", metadata, conn, schema, 'employee', 'id')
 
 
-def drop_schema(conn, schema):
-    conn.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
-
-
-def create_schema(conn, schema):
-    conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
-
-
 
 if __name__ == "__main__":
 
@@ -2393,24 +2382,27 @@ if __name__ == "__main__":
     param_bypass_ssl_cert_check = str(param_bypass_ssl_cert_check).upper() in ["1", "TRUE"]
     param_recreate_schema = str(param_recreate_schema).upper() in ["1", "TRUE"]
 
+    print_header("Kinetica SQLAlchemy Driver Example Suite Run Results")
+
+    if param_schema:
+        import gpudb
+        kdb = gpudb.GPUdb(param_url, username = param_user, password = param_pass, skip_ssl_cert_verification = param_bypass_ssl_cert_check)
+        if param_recreate_schema:
+            kdb.drop_schema(param_schema, {"no_error_if_not_exists": "true", "cascade": "true"})
+        kdb.create_schema(param_schema, {"no_error_if_exists": "true"})
+
     sa_engine = create_engine(
         "kinetica://",
         connect_args = {
             "url": param_url,
             "username": param_user,
             "password": param_pass,
+            "default_schema": param_schema,
             "bypass_ssl_cert_check": param_bypass_ssl_cert_check,
         }
     )
 
     with sa_engine.connect() as sa_conn:
-
-        print_header("Kinetica SQLAlchemy Driver Example Suite Run Results")
-
-        if param_schema:
-            if param_recreate_schema:
-                drop_schema(sa_conn, param_schema)
-            create_schema(sa_conn, param_schema)
 
         create_table_all_types(sa_conn, param_schema)
         create_table_replicated(sa_conn, param_schema)
@@ -2461,7 +2453,9 @@ if __name__ == "__main__":
         ml_evaluate_model_execute(sa_conn, param_schema)
 
         update_with_subquery(sa_conn, param_schema)
+
         update_with_subquery_in_set_clause(sa_conn, param_schema)
+
         update_with_join_infixed(sa_conn, param_schema)
         update_with_join_non_infixed(sa_conn, param_schema)
         delete_with_subquery(sa_conn, param_schema)

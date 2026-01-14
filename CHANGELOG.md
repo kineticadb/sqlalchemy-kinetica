@@ -3,6 +3,16 @@
 
 ## Version 7.2
 
+### Version 7.2.3.0 - 2026-01-14
+
+-   Updated Kinetica Python API
+-   Improved support for bind parameters
+-   Fixed issue with statement objects not being able to be executed without
+    compilation
+-   Added support for a user-specified default schema
+-   Added user guide
+
+
 ### Version 7.2.2.1 - 2025-08-01
 
 -   Switched `CompileError` from `distutils` to `sqlalchemy.exc`

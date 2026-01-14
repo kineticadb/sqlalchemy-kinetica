@@ -96,6 +96,41 @@ KI_EXTERNAL_TABLE_OPTION = 'kinetica_external_table_option'
 
 class KineticaSqlCompiler(compiler.SQLCompiler):
 
+    def visit_bindparam(self, bindparam, **kw):
+        """Override to render numeric expression literals inline.
+
+        This renders numeric literals inline ONLY when:
+        1. The bindparam has a value already set (not waiting for execution params)
+        2. The bindparam is "unique" (anonymous - typical for expression literals)
+        3. The value is numeric (int or float)
+
+        INSERT/UPDATE value placeholders are NOT affected because:
+        - They are named after columns (not unique/anonymous)
+        - Their values come from execution parameters, not from bindparam.value
+        """
+        literal_binds = kw.get('literal_binds', False)
+
+        # If literal_binds is True, let the parent handle it normally
+        if literal_binds:
+            return super().visit_bindparam(bindparam, **kw)
+
+        # Check if this is a numeric expression literal that should be inlined
+        # Expression literals have:
+        # 1. A value set (not None)
+        # 2. The unique flag True (anonymous/auto-generated parameter)
+        # 3. A numeric value
+        if (bindparam.value is not None and
+            getattr(bindparam, 'unique', False) and
+            isinstance(bindparam.value, (int, float)) and
+            not getattr(bindparam, 'callable', False)):
+            # Render the numeric value inline
+            if isinstance(bindparam.value, bool):
+                return "TRUE" if bindparam.value else "FALSE"
+            return repr(bindparam.value)
+
+        # Fall back to default behavior for everything else
+        return super().visit_bindparam(bindparam, **kw)
+
     def limit_clause(self, select: Select[Any], **kw: Any) -> str:
         text = ""
         if select._limit_clause is not None:
@@ -151,28 +186,37 @@ class KineticaSqlCompiler(compiler.SQLCompiler):
         return f"FIRST_VALUE({expr}) {nulls_clause}"
 
     def visit_update(self, update_stmt, **kw):
+        # Check for Kinetica custom update attributes in kwargs (survives cloning)
+        # Keys follow {dialect}_{option} format for SQLAlchemy's _DialectArgDict
+        from_table = update_stmt.kwargs.get('kinetica_from_table')
+        join_condition = update_stmt.kwargs.get('kinetica_join_condition')
+        where_condition = update_stmt.kwargs.get('kinetica_where_condition')
 
-        has_join = hasattr(update_stmt, '_join_condition') and update_stmt._join_condition is not None
-        has_where = hasattr(update_stmt, '_where_condition') and update_stmt._where_condition is not None
+        has_join = join_condition is not None
+        has_where = where_condition is not None
 
-        if has_join and has_where :
-            raise CompileError("Cannot have both 'join_condition' and 'where_condition' ")
+        if has_join and has_where:
+            raise CompileError("Cannot have both 'join_condition' and 'where_condition'")
+
+        # Only use literal_binds for custom KiUpdate with FROM/JOIN clauses
+        # Regular UPDATE statements should use normal parameter binding
+        if has_join or has_where:
+            kw['literal_binds'] = True
 
         # Basic UPDATE clause
         update_sql = super().visit_update(update_stmt, **kw)
 
         # FROM clause with JOIN
         if has_join:
-            if hasattr(update_stmt, '_from_table') and update_stmt._from_table is not None:
+            if from_table is not None:
                 from_clause = f"\nFROM {self.process(update_stmt.table, asfrom=True)}"
-                if isinstance(update_stmt._join_condition, BinaryExpression):
-                    from_clause += f"\nJOIN {self.process(update_stmt._from_table, asfrom=True)} ON {self.process(update_stmt._join_condition)}"
+                if isinstance(join_condition, BinaryExpression):
+                    from_clause += f"\nJOIN {self.process(from_table, asfrom=True)} ON {self.process(join_condition)}"
                 update_sql += from_clause
-
             return update_sql
         elif has_where:
-            from_clause = f"\nFROM {self.process(update_stmt.table, asfrom=True)}, {self.process(update_stmt._from_table, asfrom=True)}"
-            from_clause += f"\nWHERE {self.process(update_stmt._where_condition)}"
+            from_clause = f"\nFROM {self.process(update_stmt.table, asfrom=True)}, {self.process(from_table, asfrom=True)}"
+            from_clause += f"\nWHERE {self.process(where_condition)}"
             update_sql += from_clause
             return update_sql
 
@@ -780,25 +824,15 @@ class KineticaIdentifierPreparer(compiler.IdentifierPreparer):
     }
 
 
-# class KineticaExecutionContext(default.DefaultExecutionContext):
-#     @util.memoized_property
-#     def _preserve_raw_colnames(self):
-#         return not self.dialect._broken_dotted_colnames or self.execution_options.get(
-#             "sqlite_raw_colnames", False
-#         )
-#
-#     def _translate_colname(self, colname):
-#         # TODO: detect SQLite version 3.10.0 or greater;
-#         # see [ticket:3633]
-#
-#         # adjust for dotted column names.  SQLite
-#         # in the case of UNION may store col names as
-#         # "tablename.colname", or if using an attached database,
-#         # "database.tablename.colname", in cursor.description
-#         if not self._preserve_raw_colnames and "." in colname:
-#             return colname.split(".")[-1], colname
-#         else:
-#             return colname, None
+class KineticaExecutionContext(default.DefaultExecutionContext):
+    """Custom execution context for Kinetica.
+
+    Provides Kinetica-specific execution handling.
+    """
+
+    def create_cursor(self):
+        """Create the cursor for execution."""
+        return self._dbapi_connection.cursor()
 
 
 class KineticaDialect(default.DefaultDialect):
@@ -807,15 +841,9 @@ class KineticaDialect(default.DefaultDialect):
     name = "kinetica"
     supports_alter = False
 
-    # SQlite supports "DEFAULT VALUES" but *does not* support
-    # "VALUES (DEFAULT)"
     supports_default_values = False
     supports_default_metavalue = False
 
-    # sqlite issue:
-    # https://github.com/python/cpython/issues/93421
-    # note this parameter is no longer used by the ORM or default dialect
-    # see #9414
     supports_sane_rowcount_returning = False
 
     supports_empty_insert = False
@@ -842,7 +870,7 @@ class KineticaDialect(default.DefaultDialect):
 
     default_paramstyle = "qmark"
     default_isolation_level = 'AUTOCOMMIT'
-    # execution_ctx_cls = KineticaExecutionContext
+    execution_ctx_cls = KineticaExecutionContext
     statement_compiler = KineticaSqlCompiler
     ddl_compiler = KineticaDDLCompiler
     type_compiler_cls = KineticaTypeCompiler
@@ -1050,7 +1078,7 @@ class KineticaDialect(default.DefaultDialect):
                     """
                 )
             )
-    
+
             self.default_schema_name = result.first()[0]
 
         return self.default_schema_name
@@ -1185,7 +1213,7 @@ class KineticaDialect(default.DefaultDialect):
                         c.default_value,
                         c.is_nullable, 
                         IF(t.sql_typename = 'vector', INT(SUBSTRING(c.properties, 8, POSITION(')' IN c.properties)-8)), t.size) size, 
-                        scale,
+                        c.scale,
                         c.properties,
                         c.comments
                     FROM ki_catalog.ki_columns c 

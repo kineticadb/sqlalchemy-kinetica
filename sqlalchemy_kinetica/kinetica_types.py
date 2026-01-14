@@ -158,7 +158,7 @@ class JSONArray(TypeDecorator):
         return JSONArray(self.size)
 
 
-@compiles(JSONArray)
+@compiles(JSONArray, 'kinetica')
 def compile_jsonarray(type_, compiler, **kw):
     if type_.size is None:
         return "JSON"
@@ -263,7 +263,7 @@ class VECTOR(UserDefinedType):
         return process
 
 
-@compiles(VECTOR)
+@compiles(VECTOR, 'kinetica')
 def compile_vector(element, compiler, **kw):
     return f"VECTOR({element.dimension})"
 
@@ -325,7 +325,7 @@ class GEOMETRY(TypeDecorator):
         return value
 
 
-@compiles(GEOMETRY)
+@compiles(GEOMETRY, 'kinetica')
 def compile_geometry(element, compiler, **kw):
     return "GEOMETRY"
 

@@ -143,11 +143,11 @@ class Asof(FunctionElement):
 # Compile the function into SQL
 @compiles(Asof, 'kinetica')
 def compile_asof(element, compiler, **kwargs):
-    left_column = compiler.process(element.clauses.clauses[0])
-    right_column = compiler.process(element.clauses.clauses[1])
-    rel_range_begin = compiler.process(element.clauses.clauses[2])
-    rel_range_end = compiler.process(element.clauses.clauses[3])
-    min_max = compiler.process(element.clauses.clauses[4])
+    left_column = compiler.process(element.clauses.clauses[0], **kwargs)
+    right_column = compiler.process(element.clauses.clauses[1], **kwargs)
+    rel_range_begin = compiler.process(element.clauses.clauses[2], **kwargs)
+    rel_range_end = compiler.process(element.clauses.clauses[3], **kwargs)
+    min_max = compiler.process(element.clauses.clauses[4], **kwargs)
 
     return f"ASOF({left_column}, {right_column}, {rel_range_begin}, {rel_range_end}, {min_max})"
 

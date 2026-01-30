@@ -1,6 +1,6 @@
 # Kinetica SQLAlchemy Dialect User Guide
 
-A comprehensive guide for using the Kinetica SQLAlchemy dialect to interact with Kinetica's GPU-accelerated analytics database.
+A comprehensive guide for using the Kinetica SQLAlchemy dialect to interact with Kinetica database.
 
 ## Table of Contents
 

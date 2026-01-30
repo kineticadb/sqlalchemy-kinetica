@@ -1,6 +1,6 @@
 [project]
 name = "sqlalchemy-kinetica"
-version = "7.2.3.0"
+version = "7.2.3.1"
 dependencies = [
     'sqlalchemy>=2.0.31,<2.0.40', 
     'gpudb>=7.2.3.0',

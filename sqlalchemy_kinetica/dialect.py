@@ -907,10 +907,6 @@ class KineticaDialect(default.DefaultDialect):
         self._json_serializer = json_serializer
         self._json_deserializer = json_deserializer
 
-        # this flag used by pysqlite dialect, and perhaps others in the
-        # future, to indicate the driver is handling date/timestamp
-        # conversions (and perhaps datetime/time as well on some hypothetical
-        # driver ?)
         self.native_datetime = native_datetime
 
     @classmethod
@@ -933,7 +929,7 @@ class KineticaDialect(default.DefaultDialect):
         return self.default_isolation_level
 
     def get_isolation_level_values(self, dbapi_conn: DBAPIConnection)-> List[IsolationLevel]:
-        return Literal["AUTOCOMMIT"]
+        return list(Literal["AUTOCOMMIT"])
 
     def normalize_name(self, name: str) -> str:
         if not name:
@@ -1276,7 +1272,7 @@ class KineticaDialect(default.DefaultDialect):
             elif column["type"] in self.types_with_length:
                 column["type"] = column["type"](row[5])
 
-            columns.append(cast("ReflectedColumn", column))
+            columns.append(cast("ReflectedColumn", cast(object, column)))
 
         return columns
 

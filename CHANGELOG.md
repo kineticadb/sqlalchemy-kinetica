@@ -3,6 +3,13 @@
 
 ## Version 7.2
 
+### Version 7.2.3.1 - 2026-01-30
+
+-   Updated Kinetica Python API
+-   Added support for all Kinetica connection options
+-   Fixed `ASOF` join with filter example
+
+
 ### Version 7.2.3.0 - 2026-01-14
 
 -   Updated Kinetica Python API

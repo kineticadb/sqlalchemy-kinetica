@@ -9,6 +9,7 @@ from sqlalchemy import (
     REAL,
     DOUBLE,
     VARCHAR,
+    DECIMAL,
     UUID,
     DATE,
     TIME,
@@ -16,8 +17,7 @@ from sqlalchemy import (
     DATETIME,
     select,
     insert, text, MetaData, Table, Column, Integer, nullsfirst, asc, literal, func, and_, case, cast, desc, union,
-    union_all, intersect, except_, column, alias, update, delete, engine, )
-# from sqlalchemy.sql import expression
+    union_all, intersect, except_, column, alias, update, delete, engine, literal_column, inspect)
 from sqlalchemy.sql.ddl import CreateTable
 
 from example_utils import *
@@ -33,6 +33,7 @@ from sqlalchemy_kinetica.kinetica_types import (
     IPV4,
     BlobWKT,
     GEOMETRY,
+    JSONArray,
     BLOB,
     FLOAT,
     DECIMAL,
@@ -63,7 +64,8 @@ def create_table_all_types(conn, schema):
             b   BOOLEAN,                                          /* 0s and 1s only                                                                     */
             r   REAL,                                             /* native float                                                                       */
             d   DOUBLE,                                           /* native double                                                                      */
-            dc  DECIMAL(10, 4),                                   /* native decimal                                                                     */
+            d8  DECIMAL(10, 2),                                   /* native 8-byte decimal                                                              */
+            dc  DECIMAL(28, 18),                                  /* native 12-byte decimal                                                             */
             s   VARCHAR(TEXT_SEARCH),                             /* string, searchable, only limited in size by system-configured value                */
             cd  VARCHAR(30, DICT),                                /* char32 using dictionary-encoding of values                                         */
             ct  VARCHAR(256, TEXT_SEARCH),                        /* char256, searchable                                                                */
@@ -103,7 +105,8 @@ def create_table_all_types(conn, schema):
         Column("b", Boolean),
         Column("r", REAL),
         Column("d", DOUBLE),
-        Column("dc", DECIMAL(10, 4)),
+        Column("d8", DECIMAL(10, 2)),
+        Column("dc", DECIMAL(28, 18)),
         Column("s", String, info = {"text_search": True}),
         Column("cd", VARCHAR(30), info = {"dict": True}),
         Column("ct", VARCHAR(256), info = {"text_search": True}),
@@ -121,6 +124,7 @@ def create_table_all_types(conn, schema):
         Column("v", VECTOR(10)),
         schema = schema
     )
+    metadata.drop_all(conn.engine)
     metadata.create_all(conn.engine)
 
     print_statement("All-Types Table DDL", CreateTable(various_types).compile(conn))
@@ -150,7 +154,7 @@ def create_table_replicated(conn, schema):
             manager_id INTEGER,
             first_name VARCHAR(30),
             last_name VARCHAR(30),
-            sal DECIMAL(18,4),
+            sal DECIMAL(10,2),
             hire_date DATE,
             work_district WKT,
             office_longitude REAL,
@@ -165,7 +169,7 @@ def create_table_replicated(conn, schema):
         conn (Connection): a SQLAlchemy connection to Kinetica
         schema (str): database schema in which to perform operations
     """
-    from sqlalchemy import MetaData, Table, Column, Integer
+    from sqlalchemy import MetaData, Table, Column, Integer, String
 
     metadata = MetaData()
 
@@ -177,7 +181,7 @@ def create_table_replicated(conn, schema):
         Column("manager_id", Integer),
         Column("first_name", VARCHAR(30)),
         Column("last_name", VARCHAR(30)),
-        Column("sal", DECIMAL(18, 4)),
+        Column("sal", DECIMAL(10, 2)),
         Column("hire_date", DATE),
         Column("work_district", BlobWKT),
         Column("office_longitude", REAL),
@@ -203,7 +207,7 @@ def create_table_sharded_with_options(conn, schema):
             manager_id INTEGER,
             first_name VARCHAR(30),
             last_name VARCHAR(30),
-            sal DECIMAL(18,4),
+            sal DECIMAL(10,2),
             hire_date DATE,
             work_district WKT,
             office_longitude REAL,
@@ -237,7 +241,7 @@ def create_table_sharded_with_options(conn, schema):
         conn (Connection): a SQLAlchemy connection to Kinetica
         schema (str): database schema in which to perform operations
     """
-    from sqlalchemy import MetaData, Table, Column, Integer
+    from sqlalchemy import MetaData, Table, Column, Integer, String
 
     metadata = MetaData()
 
@@ -266,7 +270,7 @@ def create_table_sharded_with_options(conn, schema):
         Column("manager_id", Integer),
         Column("first_name", VARCHAR(30)),
         Column("last_name", VARCHAR(30)),
-        Column("sal", DECIMAL(18, 4)),
+        Column("sal", DECIMAL(10, 2)),
         Column("hire_date", DATE),
         Column("work_district", BlobWKT),
         Column("office_longitude", REAL),
@@ -334,6 +338,13 @@ LOCATION = '{}'
 USER = '{}'
 PASSWORD = '{}'
     """
+
+    SQL_DROP_DEPENDENT_TABLE = "DROP TABLE IF EXISTS {}"
+
+    drop_stmt = SQL_DROP_DEPENDENT_TABLE.format(
+        f"""{'"' + schema + '".' if schema else ''}remote_employee"""
+    )
+    conn.execute(text(drop_stmt))
 
     create_stmt = SQL_CREATE_DATA_SOURCE.format(
         f"""{'"' + schema + '".' if schema else ''}jdbc_ds""",
@@ -433,11 +444,9 @@ def create_example_tables(conn, schema):
         Column("manager_id", Integer),
         Column("first_name", VARCHAR(30)),
         Column("last_name", VARCHAR(30)),
-        Column("sal", DECIMAL(18, 4)),
+        Column("sal", DECIMAL(10, 2)),
         schema = schema
     )
-    employee_backup.create(conn)
-
 
     # Create the target table for the INSERT with CTE example
     dept2_roster = Table(
@@ -449,8 +458,6 @@ def create_example_tables(conn, schema):
         Column("mgr_last_name", VARCHAR(30)),
         schema = schema
     )
-    dept2_roster.create(conn)
-
 
     # Create the source tables for the ASOF join examples
     quotes = Table(
@@ -458,11 +465,10 @@ def create_example_tables(conn, schema):
         metadata,
         Column("symbol", VARCHAR(4)),
         Column("open_dt", DATETIME),
-        Column("open_price", DECIMAL(7,4)),
+        Column("open_price", DECIMAL(7,2)),
         schema = schema,
         prefixes = ["REPLICATED"]
     )
-    quotes.create(conn)
 
     trades = Table(
         "trades",
@@ -470,10 +476,12 @@ def create_example_tables(conn, schema):
         Column("id", Integer),
         Column("ticker", VARCHAR(4)),
         Column("dt", DATETIME),
-        Column("price", DECIMAL(7,4)),
+        Column("price", DECIMAL(7,2)),
         schema = schema
     )
-    trades.create(conn)
+
+    metadata.drop_all(conn)
+    metadata.create_all(conn)
 
     # Insert example data
     cnames = ["symbol", "open_dt", "open_price"]
@@ -507,6 +515,8 @@ def create_example_tables(conn, schema):
         Column("phone_number", VARCHAR(16)),
         schema = schema
     )
+    if inspect(conn).has_table("phone_list", schema):
+        phone_list.drop(conn)
     phone_list.create(conn)
 
     # Insert example data
@@ -532,6 +542,8 @@ def create_example_tables(conn, schema):
         Column("cell_phone", VARCHAR(16)),
         schema = schema
     )
+    if inspect(conn).has_table("customer_contact", schema):
+        customer_contact.drop(conn)
     customer_contact.create(conn)
 
     # Insert example data
@@ -557,6 +569,8 @@ def create_example_tables(conn, schema):
         Column(cnames[3], DECIMAL(5,2)),
         schema = schema
     )
+    if inspect(conn).has_table("lunch_menu", schema):
+        lunch_menu.drop(conn)
     lunch_menu.create(conn)
 
     dinner_menu = Table(
@@ -568,6 +582,8 @@ def create_example_tables(conn, schema):
         Column(cnames[3], DECIMAL(5,2)),
         schema = schema
     )
+    if inspect(conn).has_table("dinner_menu", schema):
+        dinner_menu.drop(conn)
     dinner_menu.create(conn)
 
     # Insert example data
@@ -610,6 +626,8 @@ def create_example_tables(conn, schema):
         Column(cnames[1], VARCHAR(256)),
         schema = schema
     )
+    if inspect(conn).has_table("event_log", schema):
+        event_log.drop(conn)
     event_log.create(conn)
 
     # Insert example data
@@ -629,12 +647,12 @@ def insert_multiple_records(conn, schema):
 
         INSERT INTO employee (id, dept_id, manager_id, first_name, last_name, sal, hire_date)
         VALUES
-            (1, 1, null, 'Anne',     'Arbor',   200000,      '2000-01-01'),
-            (2, 2,    1, 'Brooklyn', 'Bridges', 100000,      '2000-02-01'),
-            (3, 3,    1, 'Cal',      'Cutta',   100000,      '2000-03-01'),
-            (4, 2,    2, 'Dover',    'Della',   150000,      '2000-04-01'),
-            (5, 2,    2, 'Elba',     'Eisle',    50000,      '2000-05-01'),
-            (6, 4,    1, 'Frank',    'Furt',     12345.6789, '2000-06-01')
+            (1, 1, null, 'Anne',     'Arbor',   200000,    '2000-01-01'),
+            (2, 2,    1, 'Brooklyn', 'Bridges', 100000,    '2000-02-01'),
+            (3, 3,    1, 'Cal',      'Cutta',   100000,    '2000-03-01'),
+            (4, 2,    2, 'Dover',    'Della',   150000,    '2000-04-01'),
+            (5, 2,    2, 'Elba',     'Eisle',    50000,    '2000-05-01'),
+            (6, 4,    1, 'Frank',    'Furt',     12345.67, '2000-06-01')
 
     See:  https://docs.kinetica.com/7.2/sql/dml/#insert-into-values
 
@@ -651,12 +669,12 @@ def insert_multiple_records(conn, schema):
 
     # Define the insert statement with values
     records = [
-        {"id": 1, "dept_id": 1, "manager_id": None, "first_name": "Anne",     "last_name": "Arbor",   "sal": 200000,      "hire_date": "2000-01-01"},
-        {"id": 2, "dept_id": 2, "manager_id":    1, "first_name": "Brooklyn", "last_name": "Bridges", "sal": 100000,      "hire_date": "2000-02-01"},
-        {"id": 3, "dept_id": 3, "manager_id":    1, "first_name": "Cal",      "last_name": "Cutta",   "sal": 100000,      "hire_date": "2000-03-01"},
-        {"id": 4, "dept_id": 2, "manager_id":    2, "first_name": "Dover",    "last_name": "Della",   "sal": 150000,      "hire_date": "2000-04-01"},
-        {"id": 5, "dept_id": 2, "manager_id":    2, "first_name": "Elba",     "last_name": "Eisle",   "sal":  50000,      "hire_date": "2000-05-01"},
-        {"id": 6, "dept_id": 4, "manager_id":    1, "first_name": "Frank",    "last_name": "Furt",    "sal":  12345.6789, "hire_date": "2000-06-01"}
+        {"id": 1, "dept_id": 1, "manager_id": None, "first_name": "Anne",     "last_name": "Arbor",   "sal": 200000,    "hire_date": "2000-01-01"},
+        {"id": 2, "dept_id": 2, "manager_id":    1, "first_name": "Brooklyn", "last_name": "Bridges", "sal": 100000,    "hire_date": "2000-02-01"},
+        {"id": 3, "dept_id": 3, "manager_id":    1, "first_name": "Cal",      "last_name": "Cutta",   "sal": 100000,    "hire_date": "2000-03-01"},
+        {"id": 4, "dept_id": 2, "manager_id":    2, "first_name": "Dover",    "last_name": "Della",   "sal": 150000,    "hire_date": "2000-04-01"},
+        {"id": 5, "dept_id": 2, "manager_id":    2, "first_name": "Elba",     "last_name": "Eisle",   "sal":  50000,    "hire_date": "2000-05-01"},
+        {"id": 6, "dept_id": 4, "manager_id":    1, "first_name": "Frank",    "last_name": "Furt",    "sal":  12345.67, "hire_date": "2000-06-01"}
     ]
 
     insert_stmt = ki_insert(employee, insert_hint = "KI_HINT_UPDATE_ON_EXISTING_PK")
@@ -1029,10 +1047,10 @@ def select_join_asof_filter(conn, schema):
     # Define the subquery 't'
     t = (
         select(
-        literal('EBAY').label('ticker'),
-        func.datetime('2006-12-15 12:34:56').label('asof_dt')
-        ).subquery('t')
-    )
+            literal_column("'EBAY'").label('ticker'),
+            literal_column("DATETIME('2006-12-15 12:34:56')").label('asof_dt')
+            ).subquery('t')
+        )
 
     # Construct the full query
     query = select(
@@ -1059,7 +1077,7 @@ def select_join_asof_filter(conn, schema):
     # Compile the query to see the generated SQL
     compiled_query = query.compile(conn, compile_kwargs = {"literal_binds": True})
 
-    result = conn.execute(compiled_query)
+    result = conn.execute(query)
     print_data("ASOF JOIN as Filter", compiled_query, result)
 
 
@@ -1527,7 +1545,7 @@ def select_window_ranking(conn):
     # Compile the query
     compiled_query = query.compile(conn, compile_kwargs = {"literal_binds": True})
 
-    result = conn.execute(compiled_query)
+    result = conn.execute(query)
     print_data("Window Function - Ranking", compiled_query, result)
 
 
@@ -1751,7 +1769,8 @@ def select_pivot(conn, schema):
     # Create a new table using the query for the UNPIVOT example, next
     create_stmt = CreateTableAs(
             new_table_name,
-            query
+            query,
+            prefixes = ["OR REPLACE"]
     ).compile(conn)
 
     conn.execute(create_stmt)
@@ -2398,7 +2417,9 @@ if __name__ == "__main__":
             "username": param_user,
             "password": param_pass,
             "default_schema": param_schema,
-            "bypass_ssl_cert_check": param_bypass_ssl_cert_check,
+            "options" : {
+                "skip_ssl_cert_verification": param_bypass_ssl_cert_check
+            }
         }
     )
 
